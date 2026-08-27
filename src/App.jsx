@@ -119,7 +119,10 @@ function App() {
   const [transactions, setTransactions] = useState([]);
   const [users, setUsers] = useState([]);
   
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [accountForm, setAccountForm] = useState({ username: '', password: '', role: 'admin' });
   const [printDate, setPrintDate] = useState(new Date().toLocaleDateString('id-ID'));
@@ -204,10 +207,18 @@ function App() {
     const user = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
     if (user) {
       setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
       setLoginForm({ username: '', password: '' });
       setActiveTab('input');
     } else {
       alert('Username atau Password salah!');
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Yakin ingin keluar (logout)?')) {
+      setCurrentUser(null);
+      localStorage.removeItem('currentUser');
     }
   };
 
@@ -414,7 +425,7 @@ function App() {
       <div className="header no-print" style={{ position: 'relative' }}>
         <h1>Akoontan Store</h1>
         <p>Aplikasi Pencatatan Transaksi Harian</p>
-        <button onClick={() => setCurrentUser(null)} className="logout-btn" style={{ position: 'absolute', top: '10px', right: 0 }}>Logout</button>
+        <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '10px', right: 0 }}>Logout</button>
       </div>
 
       <div className="tabs animate-slide-up no-print">
