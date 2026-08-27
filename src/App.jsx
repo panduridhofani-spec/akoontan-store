@@ -127,6 +127,7 @@ function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState(null);
 
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -212,17 +213,43 @@ function App() {
 
   const handleAddAccount = async (e) => {
     e.preventDefault();
-    if(users.find(u => u.username === accountForm.username)) {
-      alert('Username sudah ada!');
-      return;
+    if (editingAccountId) {
+      const existing = users.find(u => u.username === accountForm.username && u.id !== editingAccountId);
+      if (existing) {
+        alert('Username sudah dipakai oleh pengguna lain!');
+        return;
+      }
+      await setDoc(doc(db, 'users', editingAccountId), accountForm, { merge: true });
+      setEditingAccountId(null);
+      setAccountForm({ username: '', password: '', role: 'admin' });
+      alert('Akun berhasil diupdate!');
+    } else {
+      if(users.find(u => u.username === accountForm.username)) {
+        alert('Username sudah ada!');
+        return;
+      }
+      const newId = Date.now().toString();
+      await setDoc(doc(db, 'users', newId), accountForm);
+      setAccountForm({ username: '', password: '', role: 'admin' });
+      alert('Akun berhasil ditambahkan!');
     }
-    const newId = Date.now().toString();
-    await setDoc(doc(db, 'users', newId), accountForm);
+  };
+
+  const handleEditAccountClick = (user) => {
+    setAccountForm({ username: user.username, password: user.password, role: user.role });
+    setEditingAccountId(user.id);
+  };
+
+  const handleCancelEditAccount = () => {
     setAccountForm({ username: '', password: '', role: 'admin' });
-    alert('Akun berhasil ditambahkan!');
+    setEditingAccountId(null);
   };
 
   const handleDeleteAccount = async (id) => {
+    if (id === currentUser.id) {
+      alert('Anda tidak bisa menghapus akun Anda sendiri! Jika ingin mengubah password, gunakan fitur Edit.');
+      return;
+    }
     const acc = users.find(u => u.id === id);
     if (acc && acc.role === 'master' && users.filter(u => u.role === 'master').length <= 1) {
       alert('Tidak bisa menghapus satu-satunya Master Admin!');
@@ -655,8 +682,15 @@ function App() {
                   <option value="master">Master Admin</option>
                 </select>
               </div>
-              <div>
-                <button type="submit" className="btn-primary" style={{ padding: '10px 16px' }}>Tambah Akun</button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="submit" className="btn-primary" style={{ padding: '10px 16px', width: 'auto' }}>
+                  {editingAccountId ? 'Update Akun' : 'Tambah Akun'}
+                </button>
+                {editingAccountId && (
+                  <button type="button" onClick={handleCancelEditAccount} className="btn-secondary" style={{ padding: '10px 16px', width: 'auto' }}>
+                    Batal
+                  </button>
+                )}
               </div>
             </div>
           </form>
@@ -683,8 +717,11 @@ function App() {
                         {u.role === 'master' ? 'Master Admin' : 'Admin Biasa'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button onClick={() => handleDeleteAccount(u.id)} className="action-btn delete-btn" title="Hapus">
+                    <td style={{ textAlign: 'center', minWidth: '80px' }}>
+                      <button onClick={() => handleEditAccountClick(u)} className="action-btn" style={{color: '#3b82f6'}} title="Edit">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteAccount(u.id)} className="action-btn delete-btn" title="Hapus" style={{marginLeft: '8px', opacity: u.id === currentUser?.id ? 0.3 : 1, cursor: u.id === currentUser?.id ? 'not-allowed' : 'pointer'}}>
                         <Trash2 size={16} />
                       </button>
                     </td>
