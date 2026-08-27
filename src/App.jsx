@@ -422,10 +422,11 @@ function App() {
 
   return (
     <div className="app-container">
-      <div className="header no-print" style={{ position: 'relative' }}>
-        <h1>Akoontan Store</h1>
-        <p>Aplikasi Pencatatan Transaksi Harian</p>
-        <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '10px', right: 0 }}>Logout</button>
+      <div className="header no-print" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <img src="/favicon.jpg" alt="Dihe Mart Logo" style={{ height: '56px', marginBottom: '8px', borderRadius: '4px', objectFit: 'contain' }} />
+        <h1 style={{ display: 'none' }}>Dihe Mart</h1>
+        <p style={{ margin: '0' }}>Aplikasi Pencatatan Transaksi Harian</p>
+        <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '0', right: 0 }}>Logout</button>
       </div>
 
       <div className="tabs animate-slide-up no-print">
@@ -578,7 +579,7 @@ function App() {
           
           <div className="print-header">
              <div>
-               <h2 style={{margin: 0, fontSize: '18px', textTransform: 'uppercase'}}>Laporan Harian - Akoontan Store</h2>
+               <h2 style={{margin: 0, fontSize: '18px', textTransform: 'uppercase'}}>Laporan Harian - Dihe Mart</h2>
                <div style={{marginTop: '4px', fontWeight: 'normal'}}>Tanggal: {printDate}</div>
              </div>
              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
