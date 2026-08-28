@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PlusCircle, List, Trash2, Calendar, User, FileText, CheckCircle, Printer, Flag, Settings, Edit2, Loader2 } from 'lucide-react';
 import { calculateAdminAndLaba, formatRupiah } from './utils/calculator';
-import { collection, onSnapshot, setDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, deleteDoc, doc, writeBatch, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import './App.css';
 
@@ -126,11 +126,110 @@ function App() {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [accountForm, setAccountForm] = useState({ username: '', password: '', role: 'admin' });
   const [printDate, setPrintDate] = useState(new Date().toLocaleDateString('id-ID'));
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
   const [editingTxId, setEditingTxId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState(null);
+  const [isWelcomeScreen, setIsWelcomeScreen] = useState(true);
+
+  // New state for Date Report Feature
+  const getTodayString = () => {
+    const today = new Date();
+    // Use local time for YYYY-MM-DD
+    const offset = today.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(today.getTime() - offset)).toISOString().slice(0, 10);
+    return localISOTime;
+  };
+  
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [tempSelectedDate, setTempSelectedDate] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // New state for Rekap Data Feature
+  const [rekapMode, setRekapMode] = useState('harian'); // 'harian' or 'bulanan'
+  const [rekapDate, setRekapDate] = useState(getTodayString());
+  const [rekapMonth, setRekapMonth] = useState(getTodayString().slice(0, 7)); // YYYY-MM
+  const [rekapData, setRekapData] = useState([]);
+  const [isFetchingRekap, setIsFetchingRekap] = useState(false);
+  const [authCodeInput, setAuthCodeInput] = useState('');
+  const [isAuthorizedForPast, setIsAuthorizedForPast] = useState(null); // Menyimpan tanggal spesifik yang diizinkan
+  const [masterActiveCode, setMasterActiveCode] = useState(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const authorizedRef = useRef(isAuthorizedForPast);
+
+  useEffect(() => {
+    authorizedRef.current = isAuthorizedForPast;
+  }, [isAuthorizedForPast]);
+
+  // Handle Date Change Request
+  const handleDateChange = (e) => {
+    const newDate = e.target.value;
+    if (newDate === getTodayString()) {
+      setIsAuthorizedForPast(null); // Reset otorisasi jika kembali ke hari ini
+      setSelectedDate(newDate);
+    } else if (currentUser?.role === 'master' || isAuthorizedForPast === newDate) {
+      setSelectedDate(newDate);
+    } else {
+      setTempSelectedDate(newDate);
+      setShowAuthModal(true);
+    }
+  };
+
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const codeRef = doc(db, 'settings', 'authCode');
+      const codeSnap = await getDoc(codeRef);
+      
+      if (codeSnap.exists() && codeSnap.data().code === authCodeInput) {
+        setIsAuthorizedForPast(tempSelectedDate); // Mengikat otorisasi HANYA pada tanggal spesifik ini
+        setSelectedDate(tempSelectedDate);
+        setShowAuthModal(false);
+        setAuthCodeInput('');
+        
+        await deleteDoc(codeRef);
+        alert('Otorisasi Berhasil! Kode OTP telah dihanguskan.');
+      } else {
+        alert('Kode Otorisasi salah atau sudah tidak berlaku!');
+      }
+    } catch (err) {
+      alert('Gagal mengecek kode: ' + err.message);
+    }
+  };
+
+  const handleAuthCancel = () => {
+    setShowAuthModal(false);
+    setTempSelectedDate(null);
+    setAuthCodeInput('');
+  };
+
+  const generateNewAuthCode = async () => {
+    setIsGeneratingCode(true);
+    try {
+      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+      await setDoc(doc(db, 'settings', 'authCode'), {
+        code: newCode,
+        createdAt: new Date().toISOString()
+      });
+      alert('Kode Otorisasi baru berhasil dibuat!');
+    } catch (err) {
+      alert('Gagal membuat kode: ' + err.message);
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+  const handleRevokeAllAccess = async () => {
+    if (confirm('Yakin ingin menutup paksa semua akses karyawan yang sedang mengedit tanggal sebelumnya?')) {
+      try {
+        await setDoc(doc(db, 'settings', 'accessControl'), {
+          revokeSignal: Date.now()
+        }, { merge: true });
+        alert('Semua akses masa lalu karyawan telah dicabut!');
+      } catch (err) {
+        alert('Gagal mencabut akses: ' + err.message);
+      }
+    }
+  };
 
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -148,7 +247,72 @@ function App() {
       alert("Error membaca database: " + error.message + ". Pastikan Rules Firestore sudah 'test mode' (allow read, write: if true).");
     });
 
-    const unsubTx = onSnapshot(collection(db, 'transactions'), (snapshot) => {
+    const unsubAuthCode = onSnapshot(doc(db, 'settings', 'authCode'), (docSnap) => {
+      if (docSnap.exists()) {
+        setMasterActiveCode(docSnap.data().code);
+      } else {
+        setMasterActiveCode(null);
+      }
+    });
+
+    const unsubAccessControl = onSnapshot(doc(db, 'settings', 'accessControl'), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().revokeSignal) {
+        if (authorizedRef.current) {
+          setIsAuthorizedForPast(null);
+          setSelectedDate(getTodayString());
+          setIsWelcomeScreen(true);
+          alert("Sesi edit masa lalu Anda telah ditutup secara paksa oleh Master Admin.");
+        }
+      }
+    });
+
+    const cleanupOldData = async () => {
+      try {
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        const offset = ninetyDaysAgo.getTimezoneOffset() * 60000;
+        const cutoffDateString = (new Date(ninetyDaysAgo.getTime() - offset)).toISOString().slice(0, 10);
+        
+        const q = query(collection(db, 'transactions'), where('tanggal', '<', cutoffDateString));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const batch = writeBatch(db);
+          snapshot.docs.forEach(d => {
+            batch.delete(doc(db, 'transactions', d.id));
+          });
+          await batch.commit();
+          console.log(`Deleted ${snapshot.size} old transactions`);
+        }
+      } catch (error) {
+        console.error("Error cleaning up old data:", error);
+      }
+    };
+    cleanupOldData();
+
+    return () => {
+      unsubUsers();
+      unsubAuthCode();
+      unsubAccessControl();
+    };
+  }, []);
+
+  // Auto-timeout for past access (15 minutes)
+  useEffect(() => {
+    let timer;
+    if (isAuthorizedForPast) {
+      timer = setTimeout(() => {
+        setIsAuthorizedForPast(null);
+        setSelectedDate(getTodayString());
+        setIsWelcomeScreen(true);
+        alert("Sesi edit masa lalu Anda telah berakhir otomatis demi keamanan (Batas 15 menit). Silakan minta kode baru jika masih membutuhkan akses.");
+      }, 15 * 60 * 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [isAuthorizedForPast]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'transactions'), where('tanggal', '==', selectedDate));
+    const unsubTx = onSnapshot(q, (snapshot) => {
       const txData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       txData.sort((a, b) => a.id.localeCompare(b.id)); 
       setTransactions(txData);
@@ -157,10 +321,9 @@ function App() {
     });
 
     return () => {
-      unsubUsers();
       unsubTx();
     };
-  }, []);
+  }, [selectedDate]);
 
   const [formData, setFormData] = useState({
     waktu: new Date().toISOString().slice(0, 16),
@@ -210,6 +373,7 @@ function App() {
       localStorage.setItem('currentUser', JSON.stringify(user));
       setLoginForm({ username: '', password: '' });
       setActiveTab('input');
+      setIsWelcomeScreen(true);
     } else {
       alert('Username atau Password salah!');
     }
@@ -219,8 +383,46 @@ function App() {
     if (confirm('Yakin ingin keluar (logout)?')) {
       setCurrentUser(null);
       localStorage.removeItem('currentUser');
+      setIsWelcomeScreen(true);
     }
   };
+
+  const fetchRekapData = async () => {
+    setIsFetchingRekap(true);
+    try {
+      let q;
+      if (rekapMode === 'harian') {
+        q = query(collection(db, 'transactions'), where('tanggal', '==', rekapDate));
+      } else {
+        const [year, month] = rekapMonth.split('-');
+        const startDate = `${year}-${month}-01`;
+        const dateObj = new Date(year, parseInt(month, 10), 0);
+        const lastDay = dateObj.getDate();
+        const endDate = `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
+        
+        q = query(
+          collection(db, 'transactions'),
+          where('tanggal', '>=', startDate),
+          where('tanggal', '<=', endDate)
+        );
+      }
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => a.id.localeCompare(b.id));
+      setRekapData(data);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memuat rekap data: ' + err.message);
+    } finally {
+      setIsFetchingRekap(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'rekap') {
+      fetchRekapData();
+    }
+  }, [activeTab, rekapMode, rekapDate, rekapMonth]);
 
   const handleAddAccount = async (e) => {
     e.preventDefault();
@@ -279,11 +481,14 @@ function App() {
     setIsSubmitting(true);
     
     try {
-      const finalWaktu = currentUser.role === 'admin' ? new Date().toISOString().slice(0, 16) : formData.waktu;
+      const now = new Date();
+      const currentRealTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      let finalWaktu = editingTxId ? formData.waktu : `${selectedDate}T${currentRealTime}`;
       
       const newTx = {
         ...formData,
         waktu: finalWaktu,
+        tanggal: selectedDate,
         inputBy: currentUser.username,
         admin: calculation.admin,
         laba: calculation.laba,
@@ -371,30 +576,11 @@ function App() {
   const totalPendapatan = transactions.reduce((acc, curr) => acc + curr.totalBayar, 0);
   const totalLabaBersih = transactions.reduce((acc, curr) => acc + curr.laba, 0);
 
-  const clearAll = () => {
-    setShowResetModal(true);
-  };
-
-  const handleConfirmReset = async () => {
-    setShowResetModal(false);
-    setTimeout(async () => {
-      window.print();
-      const batch = writeBatch(db);
-      transactions.forEach(t => {
-        batch.delete(doc(db, 'transactions', t.id));
-      });
-      await batch.commit();
-      alert("Laporan berhasil dicetak dan data transaksi telah direset!");
-    }, 300);
-  };
+  // Data otomatis dihapus setelah 90 hari, reset manual ditiadakan.
 
   const handlePrint = () => {
-    if (!isAdmin) {
-      setShowPrintModal(true);
-    } else {
-      setPrintDate(new Date().toLocaleDateString('id-ID'));
-      setTimeout(() => window.print(), 300);
-    }
+    setPrintDate(new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+    setTimeout(() => window.print(), 300);
   };
 
   if (!currentUser) {
@@ -419,17 +605,103 @@ function App() {
   }
 
   const isAdmin = currentUser.role === 'admin';
+  const isMaster = currentUser.role === 'master';
+
+  if (currentUser && isWelcomeScreen) {
+    return (
+      <div className="app-container login-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="glass-container animate-slide-up" style={{ padding: '40px 30px', textAlign: 'center', maxWidth: '400px', width: '90%' }}>
+          <img src="/favicon.jpg" alt="Logo" style={{ height: '64px', marginBottom: '16px', borderRadius: '8px', objectFit: 'contain' }} />
+          <h2 style={{ marginBottom: '8px', color: '#1f2937' }}>Selamat Datang, {currentUser.username}!</h2>
+          <p style={{ color: '#6b7280', marginBottom: '24px' }}>Silakan pilih tanggal laporan untuk mulai bekerja.</p>
+          
+          <div className="form-group" style={{ textAlign: 'left', marginBottom: '24px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Tanggal Laporan</label>
+            <input 
+              type="date" 
+              className="input-field" 
+              value={selectedDate}
+              max={getTodayString()}
+              onChange={handleDateChange}
+            />
+          </div>
+
+          <button onClick={() => setIsWelcomeScreen(false)} className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: '16px' }}>
+            Masuk ke Dasbor
+          </button>
+          
+          <button onClick={handleLogout} className="btn-secondary" style={{ width: '100%', padding: '12px', marginTop: '12px', fontSize: '14px' }}>
+            Keluar Akun
+          </button>
+        </div>
+
+        {showAuthModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} className="no-print">
+            <div className="glass-container animate-slide-up" style={{ width: '90%', maxWidth: '400px', background: 'white', padding: '24px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px', color: '#1f2937' }}>Otorisasi Diperlukan</h3>
+              <p style={{fontSize: '14px', color: '#4b5563', marginBottom: '16px', lineHeight: '1.5'}}>
+                Anda mencoba mengakses laporan pada tanggal sebelum hari ini. Silakan minta Kode OTP 6-Digit dari Master Admin.
+              </p>
+              <form onSubmit={handleAuthSubmit}>
+                <div className="form-group" style={{ marginBottom: '24px', textAlign: 'left' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>Kode Otorisasi (OTP)</label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={authCodeInput}
+                    onChange={(e) => setAuthCodeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="Contoh: 123456"
+                    style={{ letterSpacing: '8px', fontSize: '20px', textAlign: 'center', fontWeight: 'bold' }}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn-secondary" onClick={handleAuthCancel} style={{ padding: '8px 16px', width: 'auto' }}>Batal</button>
+                  <button type="submit" className="btn-primary" style={{ padding: '8px 16px', width: 'auto' }}>Verifikasi</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
-      <div className="header no-print" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <img src="/favicon.jpg" alt="Dihe Mart Logo" style={{ height: '56px', marginBottom: '8px', borderRadius: '4px', objectFit: 'contain' }} />
+      <div className="header no-print" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
+        <img src="/favicon.jpg" alt="Dihe Mart Logo" style={{ height: '48px', marginBottom: '8px', borderRadius: '4px', objectFit: 'contain' }} />
         <h1 style={{ display: 'none' }}>Dihe Mart</h1>
-        <p style={{ margin: '0' }}>Aplikasi Pencatatan Transaksi Harian</p>
+        <p style={{ margin: '0', fontSize: '14px', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <span>Laporan: <strong style={{ color: '#4f46e5' }}>{selectedDate}</strong></span>
+          {isAuthorizedForPast && !isMaster && (
+            <button 
+              onClick={() => {
+                setIsAuthorizedForPast(null);
+                setSelectedDate(getTodayString());
+                setIsWelcomeScreen(true);
+              }} 
+              style={{ fontSize: '10px', background: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5', padding: '2px 8px', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}
+              title="Kunci kembali akses masa lalu"
+            >
+              🔒 Tutup Akses
+            </button>
+          )}
+        </p>
+        <button onClick={() => setIsWelcomeScreen(true)} className="action-btn" style={{ marginTop: '8px', fontSize: '12px', background: '#e0e7ff', color: '#4f46e5', padding: '6px 16px', borderRadius: '20px', fontWeight: '600' }}>Ubah Tanggal</button>
         <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '0', right: 0 }}>Logout</button>
       </div>
 
       <div className="tabs animate-slide-up no-print">
+        {isMaster && (
+          <div 
+            className={`tab ${activeTab === 'rekap' ? 'active' : ''}`}
+            onClick={() => setActiveTab('rekap')}
+          >
+            <FileText size={20} style={{marginBottom: 4, display: 'block', margin: '0 auto'}}/>
+            Rekap Data
+          </div>
+        )}
         <div 
           className={`tab ${activeTab === 'input' ? 'active' : ''}`}
           onClick={() => setActiveTab('input')}
@@ -458,19 +730,7 @@ function App() {
       {activeTab === 'input' && (
         <div className="glass-container form-card animate-slide-up no-print">
           <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label><Calendar size={14} style={{display:'inline', marginRight:6}}/>Waktu Transaksi</label>
-              <input 
-                type={isAdmin ? "text" : "datetime-local"} 
-                className="input-field" 
-                name="waktu" 
-                value={isAdmin ? "Otomatis (Saat ini)" : formData.waktu} 
-                onChange={handleChange} 
-                readOnly={isAdmin} 
-                required={!isAdmin} 
-                style={isAdmin ? { backgroundColor: '#f3f4f6', color: '#6b7280', cursor: 'not-allowed' } : {}}
-              />
-            </div>
+            {/* Waktu Transaksi diatur otomatis di background */}
 
             <div className="form-group">
               <label><User size={14} style={{display:'inline', marginRight:6}}/>Nama Pelanggan (Margin Kiri)</label>
@@ -569,9 +829,6 @@ function App() {
               {transactions.length > 0 && (
                 <>
                   <button onClick={handlePrint} className="btn-primary" style={{padding: '8px 16px', fontSize: 14, width:'auto'}}><Printer size={16}/> Cetak PDF</button>
-                  {!isAdmin && (
-                    <button onClick={clearAll} className="btn-danger">Reset Data</button>
-                  )}
                 </>
               )}
             </div>
@@ -614,7 +871,8 @@ function App() {
                           {t.pelanggan || ''}
                         </td>
                         <td className="no-print" style={{ fontSize: '12px', color: '#6b7280' }}>
-                          {t.inputBy || 'master'}
+                          <div style={{ fontWeight: 600 }}>{t.inputBy || 'master'}</div>
+                          <div style={{ fontSize: '10px', marginTop: '2px' }}>{t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : ''}</div>
                         </td>
                         <td>
                           <span>{getFormattedProduct(t)}</span>
@@ -677,6 +935,66 @@ function App() {
             <h2>Kelola Akun Pengguna</h2>
           </div>
           
+          <div className="account-form" style={{ marginBottom: '24px', background: 'rgba(79, 70, 229, 0.05)', borderColor: 'rgba(79, 70, 229, 0.2)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '15px', color: 'var(--primary)' }}>Kode Otorisasi (OTP)</h3>
+            <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '16px', lineHeight: '1.4' }}>
+              Buatkan kode di bawah ini jika karyawan (Admin) meminta izin untuk mengakses atau mencetak laporan di hari sebelumnya. Kode ini hanya bisa dipakai 1 kali.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ 
+                background: 'white', 
+                border: '2px dashed var(--primary)', 
+                borderRadius: '8px', 
+                padding: '12px 24px',
+                fontSize: '24px',
+                fontWeight: 'bold',
+                letterSpacing: '4px',
+                color: masterActiveCode ? '#1f2937' : '#9ca3af',
+                minWidth: '160px',
+                textAlign: 'center'
+              }}>
+                {masterActiveCode || '------'}
+              </div>
+              <button 
+                onClick={generateNewAuthCode} 
+                className="btn-primary" 
+                style={{ width: 'auto', padding: '12px 20px' }}
+                disabled={isGeneratingCode}
+              >
+                {isGeneratingCode ? <Loader2 size={16} className="animate-spin" /> : 'Buat Kode Baru'}
+              </button>
+              {masterActiveCode && (
+                <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 'bold' }}>
+                  ✓ Kode Aktif
+                </span>
+              )}
+            </div>
+            
+            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(79, 70, 229, 0.1)' }}>
+              <button 
+                onClick={handleRevokeAllAccess}
+                style={{ 
+                  background: '#fee2e2', 
+                  color: '#ef4444', 
+                  border: '1px solid #fca5a5', 
+                  padding: '10px 16px', 
+                  borderRadius: '8px', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                🔒 Cabut Semua Akses Karyawan Saat Ini
+              </button>
+              <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px', marginBottom: '0' }}>
+                *Sistem juga akan otomatis mencabut akses karyawan setelah 15 menit mereka menggunakan kode OTP.
+              </p>
+            </div>
+          </div>
+
           <form className="account-form" onSubmit={handleAddAccount}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '150px' }}>
@@ -747,63 +1065,149 @@ function App() {
 
 
 
-      {showPrintModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} className="no-print">
-          <div className="glass-container animate-slide-up" style={{ width: '90%', maxWidth: '400px', background: 'white', padding: '24px' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px', color: '#1f2937' }}>Pilih Tanggal Cetak PDF</h3>
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px' }}>Tanggal Laporan</label>
-              <input 
-                type="date" 
-                className="input-field" 
-                onChange={(e) => {
-                  if(e.target.value) {
-                    setPrintDate(new Date(e.target.value).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
-                  }
-                }} 
-              />
-              <p style={{fontSize: '12px', color: '#6b7280', marginTop: '8px', lineHeight: '1.4'}}>Tanggal ini hanya digunakan untuk judul di dalam file PDF laporan.</p>
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setShowPrintModal(false)} style={{ padding: '8px 16px', width: 'auto' }}>Batal</button>
-              <button className="btn-primary" onClick={() => { setShowPrintModal(false); setTimeout(() => window.print(), 300); }} style={{ padding: '8px 16px', width: 'auto' }}>
-                <Printer size={16} style={{display:'inline', marginRight: '6px', verticalAlign: '-3px'}}/> Cetak PDF
-              </button>
+      {activeTab === 'rekap' && isMaster && (
+        <div className="glass-container report-card animate-slide-up">
+          <div className="report-header no-print">
+            <h2>Rekap Data & Cetak Laporan</h2>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <select className="input-field" style={{ width: 'auto' }} value={rekapMode} onChange={e => setRekapMode(e.target.value)}>
+                <option value="harian">Harian</option>
+                <option value="bulanan">Bulanan</option>
+              </select>
+              {rekapMode === 'harian' ? (
+                <input type="date" className="input-field" style={{ width: 'auto' }} max={getTodayString()} value={rekapDate} onChange={e => setRekapDate(e.target.value)} />
+              ) : (
+                <input type="month" className="input-field" style={{ width: 'auto' }} max={getTodayString().slice(0, 7)} value={rekapMonth} onChange={e => setRekapMonth(e.target.value)} />
+              )}
             </div>
           </div>
+
+          <div className="no-print" style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => { 
+                if (rekapMode === 'harian') {
+                    setPrintDate(new Date(rekapDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+                } else {
+                    const [year, month] = rekapMonth.split('-');
+                    const dateObj = new Date(year, parseInt(month, 10) - 1);
+                    setPrintDate(`Bulan ${dateObj.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`);
+                }
+                setTimeout(() => window.print(), 300); 
+            }} className="btn-primary" style={{ padding: '8px 16px', width: 'auto' }} disabled={rekapData.length === 0}>
+              <Printer size={16} /> Cetak PDF
+            </button>
+          </div>
+
+          {/* Print Header */}
+          <div className="print-header">
+             <div>
+               <h2 style={{margin: 0, fontSize: '18px', textTransform: 'uppercase'}}>
+                 {rekapMode === 'harian' ? 'Laporan Harian' : 'Rangkuman Bulanan'} - Dihe Mart
+               </h2>
+               <div style={{marginTop: '4px', fontWeight: 'normal'}}>
+                 {rekapMode === 'harian' ? `Tanggal: ${printDate}` : `Periode: ${printDate}`}
+               </div>
+             </div>
+             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+               <div>Total Pendapatan: {formatRupiah(rekapData.reduce((acc, curr) => acc + curr.totalBayar, 0))}</div>
+               <div>Total Laba Bersih: {formatRupiah(rekapData.reduce((acc, curr) => acc + curr.laba, 0))}</div>
+             </div>
+          </div>
+
+          {isFetchingRekap ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto', color: '#4f46e5' }} />
+              <p>Memuat data...</p>
+            </div>
+          ) : rekapData.length > 0 ? (
+            rekapMode === 'harian' ? (
+              // Tabel Harian
+              <div className="table-responsive">
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th style={{width: 40, textAlign: 'center'}}>No</th>
+                      <th style={{width: 130}}>Nama</th>
+                      <th className="no-print">Admin</th>
+                      <th>Produk</th>
+                      <th style={{width: 80, textAlign: 'center'}}>Total Unit</th>
+                      <th className="text-right">Total Penjualan</th>
+                      <th className="text-right print-laba">Laba</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rekapData.map((t, i) => (
+                      <tr key={t.id} className={t.ditandai ? 'row-marked' : ''}>
+                        <td style={{textAlign: 'center'}}>{i + 1}</td>
+                        <td style={{ fontSize: '12px', fontStyle: 'italic', color: '#555', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {t.pelanggan || ''}
+                        </td>
+                        <td className="no-print" style={{ fontSize: '12px', color: '#6b7280' }}>
+                          <div style={{ fontWeight: 600 }}>{t.inputBy || 'master'}</div>
+                          <div style={{ fontSize: '10px', marginTop: '2px' }}>{t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : ''}</div>
+                        </td>
+                        <td>
+                          <span>{getFormattedProduct(t)}</span>
+                        </td>
+                        <td></td>
+                        <td className="text-right font-bold">{formatRupiah(t.totalBayar)}</td>
+                        <td className="text-right print-laba" style={{color: 'var(--success)'}}>
+                          {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance') ? '-' : formatRupiah(t.laba)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              // Tabel Rangkuman Bulanan
+              <div className="table-responsive">
+                <table className="print-table">
+                  <thead>
+                    <tr>
+                      <th style={{width: 40, textAlign: 'center'}}>No</th>
+                      <th>Jenis Transaksi</th>
+                      <th style={{ textAlign: 'center' }}>Jumlah Trx</th>
+                      <th className="text-right">Total Penjualan</th>
+                      <th className="text-right print-laba">Total Laba</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(rekapData.reduce((acc, curr) => {
+                      if (!acc[curr.jenis]) acc[curr.jenis] = { count: 0, total: 0, laba: 0 };
+                      acc[curr.jenis].count += 1;
+                      acc[curr.jenis].total += curr.totalBayar;
+                      acc[curr.jenis].laba += curr.laba;
+                      return acc;
+                    }, {})).map(([jenis, data], i) => (
+                      <tr key={jenis}>
+                        <td style={{textAlign: 'center'}}>{i + 1}</td>
+                        <td style={{ fontWeight: 'bold' }}>{jenis}</td>
+                        <td style={{ textAlign: 'center' }}>{data.count}</td>
+                        <td className="text-right font-bold">{formatRupiah(data.total)}</td>
+                        <td className="text-right print-laba" style={{color: 'var(--success)'}}>{formatRupiah(data.laba)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+                      <td colSpan={2} style={{ textAlign: 'right' }}>TOTAL KESELURUHAN</td>
+                      <td style={{ textAlign: 'center' }}>{rekapData.length}</td>
+                      <td className="text-right">{formatRupiah(rekapData.reduce((acc, curr) => acc + curr.totalBayar, 0))}</td>
+                      <td className="text-right print-laba" style={{color: 'var(--success)'}}>{formatRupiah(rekapData.reduce((acc, curr) => acc + curr.laba, 0))}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          ) : (
+            <div className="empty-state no-print">
+              <FileText size={48} style={{margin:'0 auto'}}/>
+              <p>Tidak ada data untuk periode ini.</p>
+            </div>
+          )}
         </div>
       )}
 
-      {showResetModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} className="no-print">
-          <div className="glass-container animate-slide-up" style={{ width: '90%', maxWidth: '400px', background: '#fef2f2', padding: '24px', border: '1px solid #fca5a5' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '18px', color: '#b91c1c' }}>Verifikasi Reset Data</h3>
-            <p style={{fontSize: '14px', color: '#7f1d1d', marginBottom: '16px', lineHeight: '1.5'}}>
-              Anda akan menghapus <strong>seluruh data transaksi hari ini</strong>. 
-              Sistem akan secara otomatis <strong>mencetak Laporan Harian</strong> sebelum data dihapus permanen.
-            </p>
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#991b1b' }}>Pilih Tanggal Untuk Laporan PDF</label>
-              <input 
-                type="date" 
-                className="input-field" 
-                style={{borderColor: '#fca5a5'}}
-                onChange={(e) => {
-                  if(e.target.value) {
-                    setPrintDate(new Date(e.target.value).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
-                  }
-                }} 
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setShowResetModal(false)} style={{ padding: '8px 16px', width: 'auto' }}>Batal</button>
-              <button className="btn-danger" onClick={handleConfirmReset} style={{ padding: '8px 16px', width: 'auto' }}>
-                <Printer size={16} style={{display:'inline', marginRight: '6px', verticalAlign: '-3px'}}/> Cetak & Reset Data
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
