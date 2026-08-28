@@ -18,6 +18,7 @@ const JENIS_TRANSAKSI = [
   'BPJS',
   'Multifinance',
   'Pinjaman BRI',
+  'Bayar QRIS',
   'Admin'
 ];
 
@@ -881,7 +882,7 @@ function App() {
                         <td className="text-right font-bold">{formatRupiah(t.totalBayar)}</td>
                         {!isAdmin && (
                           <td className="text-right print-laba" style={{color: 'var(--success)'}}>
-                            {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance') ? '-' : formatRupiah(t.laba)}
+                            {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance' || t.jenis === 'Bayar QRIS') ? '-' : formatRupiah(t.laba)}
                           </td>
                         )}
                         {!isAdmin && (
@@ -1151,7 +1152,7 @@ function App() {
                         <td></td>
                         <td className="text-right font-bold">{formatRupiah(t.totalBayar)}</td>
                         <td className="text-right print-laba" style={{color: 'var(--success)'}}>
-                          {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance') ? '-' : formatRupiah(t.laba)}
+                          {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance' || t.jenis === 'Bayar QRIS') ? '-' : formatRupiah(t.laba)}
                         </td>
                       </tr>
                     ))}
