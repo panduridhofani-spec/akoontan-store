@@ -85,11 +85,16 @@ export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0) =
   else if (jenis === 'Transfer Antar Bank') {
     if (nominal <= 2000000) {
       admin = 10000;
-      laba = admin - 10000;
+    } else if (nominal <= 3999000) {
+      admin = 12000;
+    } else if (nominal <= 6999000) {
+      admin = 15000;
+    } else if (nominal <= 9999999) {
+      admin = 17000;
     } else {
-      admin = Number(adminBank) + 5000;
-      laba = admin - 10000;
+      admin = Math.floor(nominal / 1000) + 10000;
     }
+    laba = admin - 10000;
   }
   else if (jenis === 'Pulsa') {
     const numNominal = Number(nominal) || 0;

@@ -790,12 +790,7 @@ function App() {
               <input type="number" className="input-field" name="nominal" placeholder="0" value={formData.nominal} onChange={handleChange} required min="0" max="999999999" />
             </div>
 
-            {formData.jenis === 'Transfer Antar Bank' && Number(formData.nominal) > 2000000 && (
-              <div className="form-group animate-slide-up">
-                <label>Biaya Admin dari Bank (Rp)</label>
-                <input type="number" className="input-field" name="adminBank" placeholder="Cth: 2500" value={formData.adminBank} onChange={handleChange} required min="0" max="999999" />
-              </div>
-            )}
+
 
             <div className="form-group">
               <label className="laba-override-box" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', background: formData.ditandai ? '#fffae6' : '#f9fafb', border: formData.ditandai ? '1px solid #fde047' : '1px solid #e5e7eb', borderRadius: '6px' }}>
