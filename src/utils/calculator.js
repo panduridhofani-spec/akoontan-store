@@ -104,6 +104,7 @@ export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0) =
   }
   else if (jenis === 'Paket Data') { laba = 2000; }
   else if (jenis === 'Token Listrik') { admin = 3000; laba = 0; }
+  else if (jenis === 'Listrik Meteran') { admin = 0; laba = 0; }
   else if (jenis === 'BPJS' || jenis === 'Multifinance' || jenis === 'Bayar QRIS') { laba = 0; admin = 0; }
   else if (jenis === 'Pinjaman BRI') {
     if (nominal <= 99000) admin = 2000;

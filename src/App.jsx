@@ -15,6 +15,7 @@ const JENIS_TRANSAKSI = [
   'Pulsa',
   'Paket Data',
   'Token Listrik',
+  'Listrik Meteran',
   'BPJS',
   'Multifinance',
   'Pinjaman BRI',
@@ -48,6 +49,8 @@ const getFormattedProduct = (trx) => {
     base = `Paket Data ${nom}`;
   } else if (trx.jenis === 'Token Listrik') {
     base = `Token Listrik ${nom}`;
+  } else if (trx.jenis === 'Listrik Meteran') {
+    base = `Listrik Meteran ${nom}`;
   } else if (trx.jenis === 'Virtual Account / BRIVA') {
     base = `Pembayaran ${trx.provider} ${nom}`;
   } else if (trx.jenis === 'Admin') {
@@ -691,6 +694,10 @@ function App() {
         </p>
         <button onClick={() => setIsWelcomeScreen(true)} className="action-btn" style={{ marginTop: '8px', fontSize: '12px', background: '#e0e7ff', color: '#4f46e5', padding: '6px 16px', borderRadius: '20px', fontWeight: '600' }}>Ubah Tanggal</button>
         <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '0', right: 0 }}>Logout</button>
+      </div>
+
+      <div className="print-footer print-only">
+        Laporan Harian - {printDate}
       </div>
 
       <div className="tabs animate-slide-up no-print">

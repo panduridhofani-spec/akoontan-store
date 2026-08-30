@@ -150,17 +150,22 @@ td {
 /* --- PRINT STYLES --- */
 @media print {
   @page {
-    margin: 0; /* Menghapus header dan footer default browser (URL, Tanggal, Page Title) */
+    margin-top: 0 !important; /* Menghapus margin atas memaksa browser menyembunyikan tanggal bawaannya */
+    margin-bottom: 0 !important; /* Menghapus margin bawah memaksa browser menyembunyikan localhost dan nomor halaman */
+    margin-left: 1.5cm;
+    margin-right: 1.5cm;
   }
   body {
     background: white;
     margin: 0;
-    padding: 2cm; /* Menambahkan padding agar konten tidak terlalu menempel ke tepi kertas */
+    padding: 0;
   }
   .app-container {
     max-width: 100%;
     margin: 0;
     padding: 0;
+    padding-top: 1.5cm; /* Mengganti margin atas yang hilang agar halaman 1 tetap punya space */
+    padding-bottom: 1.5cm; /* Mengganti margin bawah yang hilang */
   }
   .no-print {
     display: none !important;
@@ -211,7 +216,16 @@ td {
     print-color-adjust: exact;
   }
 
-  /* To match layout of having laba far right if needed, we keep it as a column */
+  .print-footer {
+    display: block !important;
+    position: fixed;
+    bottom: 0.5cm; /* Disesuaikan karena margin-bottom 0 */
+    right: 0;
+    font-size: 11px;
+    font-weight: bold;
+    color: #555;
+    text-align: right;
+  }
 }
 
 /* Action Buttons */
