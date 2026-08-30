@@ -331,6 +331,7 @@ function App() {
 
   const [formData, setFormData] = useState({
     waktu: new Date().toISOString().slice(0, 16),
+    jamManual: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     pelanggan: '',
     keterangan: '',
     jenis: '',
@@ -504,6 +505,7 @@ function App() {
         setEditingTxId(null);
         setFormData({
           waktu: new Date().toISOString().slice(0, 16),
+          jamManual: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
           pelanggan: '',
           jenis: '',
           provider: '',
@@ -518,6 +520,7 @@ function App() {
         await setDoc(doc(db, 'transactions', newTxId), newTx);
         setFormData({
           waktu: new Date().toISOString().slice(0, 16),
+          jamManual: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
           pelanggan: '',
           keterangan: '',
           jenis: '',
@@ -538,6 +541,7 @@ function App() {
   const handleEditTransaction = (t) => {
     setFormData({
       waktu: t.waktu,
+      jamManual: t.jamManual || (t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })),
       pelanggan: t.pelanggan || '',
       jenis: t.jenis,
       provider: t.provider || '',
@@ -553,6 +557,7 @@ function App() {
   const handleCancelEdit = () => {
     setFormData({
       waktu: new Date().toISOString().slice(0, 16),
+      jamManual: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
       pelanggan: '',
       jenis: '',
       provider: '',
@@ -740,9 +745,15 @@ function App() {
           <form onSubmit={handleSubmit}>
             {/* Waktu Transaksi diatur otomatis di background */}
 
-            <div className="form-group">
-              <label><User size={14} style={{display:'inline', marginRight:6}}/>Nama Pelanggan (Margin Kiri)</label>
-              <input type="text" className="input-field" name="pelanggan" placeholder="Cth: Mak, Fendra" value={formData.pelanggan} onChange={handleChange} maxLength={15} />
+            <div className="form-group" style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1 }}>
+                <label><User size={14} style={{display:'inline', marginRight:6}}/>Nama Pelanggan (Margin Kiri)</label>
+                <input type="text" className="input-field" name="pelanggan" placeholder="Cth: Mak, Fendra" value={formData.pelanggan} onChange={handleChange} maxLength={15} />
+              </div>
+              <div style={{ width: '120px' }}>
+                <label>Jam (Manual)</label>
+                <input type="time" className="input-field" name="jamManual" value={formData.jamManual} onChange={handleChange} required />
+              </div>
             </div>
 
             <div className="form-group">
@@ -863,6 +874,7 @@ function App() {
                     <tr>
                       <th style={{width: 40, textAlign: 'center'}}>No</th>
                       <th style={{width: 130}}>Nama</th>
+                      <th style={{width: 60, textAlign: 'center'}}>Jam</th>
                       <th className="no-print">Admin</th>
                       <th>Produk</th>
                       <th style={{width: 80, textAlign: 'center'}}>Total Unit</th>
@@ -877,6 +889,9 @@ function App() {
                         <td style={{textAlign: 'center'}}>{i + 1}</td>
                         <td style={{ fontSize: '12px', fontStyle: 'italic', color: '#555', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.pelanggan || ''}
+                        </td>
+                        <td style={{ textAlign: 'center', fontSize: '12px' }}>
+                          {t.jamManual || (t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : '-')}
                         </td>
                         <td className="no-print" style={{ fontSize: '12px', color: '#6b7280' }}>
                           <div style={{ fontWeight: 600 }}>{t.inputBy || 'master'}</div>
@@ -1135,6 +1150,7 @@ function App() {
                     <tr>
                       <th style={{width: 40, textAlign: 'center'}}>No</th>
                       <th style={{width: 130}}>Nama</th>
+                      <th style={{width: 60, textAlign: 'center'}}>Jam</th>
                       <th className="no-print">Admin</th>
                       <th>Produk</th>
                       <th style={{width: 80, textAlign: 'center'}}>Total Unit</th>
@@ -1148,6 +1164,9 @@ function App() {
                         <td style={{textAlign: 'center'}}>{i + 1}</td>
                         <td style={{ fontSize: '12px', fontStyle: 'italic', color: '#555', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.pelanggan || ''}
+                        </td>
+                        <td style={{ textAlign: 'center', fontSize: '12px' }}>
+                          {t.jamManual || (t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : '-')}
                         </td>
                         <td className="no-print" style={{ fontSize: '12px', color: '#6b7280' }}>
                           <div style={{ fontWeight: 600 }}>{t.inputBy || 'master'}</div>
