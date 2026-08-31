@@ -92,7 +92,8 @@ export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0) =
     } else if (nominal <= 9999999) {
       admin = 17000;
     } else {
-      admin = Math.floor(nominal / 1000) + 10000;
+      let kelipatan = Math.floor(nominal / 1000000);
+      admin = 10000 + (kelipatan * 1000);
     }
     laba = admin - 10000;
   }
