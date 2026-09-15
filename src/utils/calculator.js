@@ -74,11 +74,8 @@ export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0) =
   else if (jenis === 'Transfer Bank') {
     admin = hitungAdminTransfer(nominal);
     let potongan = 0;
-    if (provider === 'BRI' || provider === 'BNI') { 
+    if (provider === 'BRI' || provider === 'BNI' || provider === 'BCA' || provider === 'Mandiri' || provider === 'Seabank') { 
       potongan = 4000;
-    }
-    else if (provider === 'BCA' || provider === 'Mandiri' || provider === 'Seabank') { 
-      potongan = 2000;
     }
     laba = admin - potongan;
   }
