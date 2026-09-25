@@ -134,6 +134,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState(null);
   const [isWelcomeScreen, setIsWelcomeScreen] = useState(true);
+  const [searchTime, setSearchTime] = useState('');
 
   // New state for Date Report Feature
   const getTodayString = () => {
@@ -582,8 +583,14 @@ function App() {
     }
   };
 
-  const totalPendapatan = transactions.reduce((acc, curr) => acc + curr.totalBayar, 0);
-  const totalLabaBersih = transactions.reduce((acc, curr) => acc + curr.laba, 0);
+  const filteredTransactions = transactions.filter(t => {
+    if (!searchTime) return true;
+    const jam = t.jamManual || (t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : '-');
+    return jam.includes(searchTime);
+  });
+
+  const totalPendapatan = filteredTransactions.reduce((acc, curr) => acc + curr.totalBayar, 0);
+  const totalLabaBersih = filteredTransactions.reduce((acc, curr) => acc + curr.laba, 0);
 
   // Data otomatis dihapus setelah 90 hari, reset manual ditiadakan.
 
@@ -840,6 +847,14 @@ function App() {
           <div className="report-header">
             <h2 className="print-title">LAPORAN HARIAN</h2>
             <div className="no-print" style={{display:'flex', gap: '12px', alignItems: 'center'}}>
+              <input 
+                type="text" 
+                className="input-field" 
+                placeholder="Cari Jam (misal: 07)" 
+                value={searchTime}
+                onChange={(e) => setSearchTime(e.target.value)}
+                style={{ width: '150px', padding: '8px 12px', fontSize: '13px' }}
+              />
               {transactions.length > 0 && (
                 <>
                   <button onClick={handlePrint} className="btn-primary" style={{padding: '8px 16px', fontSize: 14, width:'auto'}}><Printer size={16}/> Cetak PDF</button>
@@ -879,7 +894,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.map((t, i) => (
+                    {filteredTransactions.map((t, i) => (
                       <tr key={t.id} className={t.ditandai ? 'row-marked' : ''}>
                         <td style={{textAlign: 'center'}}>{i + 1}</td>
                         <td style={{ fontSize: '12px', fontStyle: 'italic', color: '#555', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -924,7 +939,7 @@ function App() {
               <div className="summary-box no-print" style={{marginTop: 20}}>
                 <div className="summary-row">
                   <span>Total Transaksi:</span>
-                  <span>{transactions.length} Trx</span>
+                  <span>{filteredTransactions.length} Trx</span>
                 </div>
                 {!isAdmin && (
                   <div className="summary-row">
