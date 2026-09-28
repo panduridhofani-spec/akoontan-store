@@ -586,7 +586,9 @@ function App() {
   const filteredTransactions = transactions.filter(t => {
     if (!searchTime) return true;
     const jam = t.jamManual || (t.waktu && t.waktu.length >= 16 ? t.waktu.substring(11, 16) : '-');
-    return jam.includes(searchTime);
+    const normalizedJam = jam.replace(/\./g, ':');
+    const normalizedSearch = searchTime.replace(/\./g, ':');
+    return normalizedJam.includes(normalizedSearch);
   });
 
   const totalPendapatan = filteredTransactions.reduce((acc, curr) => acc + curr.totalBayar, 0);
@@ -850,10 +852,10 @@ function App() {
               <input 
                 type="text" 
                 className="input-field" 
-                placeholder="Cari Jam (misal: 07)" 
+                placeholder="Cari Jam (misal: 07 atau 07:10)" 
                 value={searchTime}
                 onChange={(e) => setSearchTime(e.target.value)}
-                style={{ width: '150px', padding: '8px 12px', fontSize: '13px' }}
+                style={{ width: '190px', padding: '8px 12px', fontSize: '13px' }}
               />
               {transactions.length > 0 && (
                 <>
