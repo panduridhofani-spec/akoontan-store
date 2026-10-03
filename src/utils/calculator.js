@@ -11,11 +11,100 @@ const hitungAdminTarikTunai = (nom) => {
   return 12000 + (kelipatan * 1000);
 };
 
-export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0) => {
+export const calculateAdminAndLaba = (jenis, provider, nominal, adminBank = 0, dynamicConfig = null) => {
   let admin = 0;
   let laba = 0;
   let totalBayar = Number(nominal) || 0;
+  const numNominal = Number(nominal) || 0;
 
+  if (dynamicConfig) {
+    // 1. Hitung Admin dari Config Dinamis
+    if (dynamicConfig.adminType === 'flat') {
+      admin = Number(dynamicConfig.adminFlat) || 0;
+    } else if (dynamicConfig.adminType === 'range') {
+      let foundFee = 0;
+      // Pastikan ranges di-sort ascending by max
+      const sortedRanges = [...(dynamicConfig.adminRanges || [])].sort((a, b) => a.max - b.max);
+      let rangeMatched = false;
+      for (const r of sortedRanges) {
+        if (numNominal <= r.max) {
+          foundFee = r.fee;
+          rangeMatched = true;
+          break;
+        }
+      }
+      
+      // Jika tidak ketemu di range (lebih besar dari max range tertinggi)
+      if (!rangeMatched && sortedRanges.length > 0) {
+        foundFee = sortedRanges[sortedRanges.length - 1].fee;
+      }
+
+      admin = foundFee;
+
+      // Handle overflow kelipatan
+      if (dynamicConfig.adminOverflow && dynamicConfig.adminOverflow.active) {
+        const overflowLimit = Number(dynamicConfig.adminOverflow.limit) || 0;
+        if (numNominal > overflowLimit) {
+          const sisa = numNominal - overflowLimit;
+          const perInc = Number(dynamicConfig.adminOverflow.perIncrement) || 1;
+          const kelipatan = Math.floor(sisa / perInc);
+          const addFee = Number(dynamicConfig.adminOverflow.addFee) || 0;
+          admin += (kelipatan * addFee);
+        }
+      }
+    } else {
+      admin = 0; // zero type
+    }
+
+    // 2. Hitung Laba dari Config Dinamis
+    if (dynamicConfig.labaType === 'equals_admin') {
+      laba = admin;
+    } else if (dynamicConfig.labaType === 'flat') {
+      laba = Number(dynamicConfig.labaFlat) || 0;
+    } else if (dynamicConfig.labaType === 'admin_minus_flat') {
+      laba = admin - (Number(dynamicConfig.labaMinusFlat) || 0);
+    } else if (dynamicConfig.labaType === 'admin_minus_provider') {
+      const potongan = (dynamicConfig.labaProviderPotongan && dynamicConfig.labaProviderPotongan[provider]) 
+        ? Number(dynamicConfig.labaProviderPotongan[provider]) 
+        : 0;
+      laba = admin - potongan;
+    } else if (dynamicConfig.labaType === 'range') {
+      let foundLaba = 0;
+      const sortedLabaRanges = [...(dynamicConfig.labaRanges || [])].sort((a, b) => a.max - b.max);
+      for (const r of sortedLabaRanges) {
+        if (numNominal <= r.max) {
+          foundLaba = r.laba;
+          break;
+        }
+      }
+      // If exceeds max range, use the max range's laba
+      if (foundLaba === 0 && sortedLabaRanges.length > 0 && numNominal > sortedLabaRanges[sortedLabaRanges.length - 1].max) {
+        foundLaba = sortedLabaRanges[sortedLabaRanges.length - 1].laba;
+      }
+      laba = foundLaba;
+    } else if (dynamicConfig.labaType === 'input_nominal') {
+      laba = numNominal;
+    } else {
+      laba = 0;
+    }
+
+    // Biaya Tambahan Logic (Dynamic)
+    let biayaTambahan = admin > 0 ? admin : laba;
+    
+    // Khusus transaksi di mana Laba = Admin (misal Tarik PKH), biaya yang dibebankan ke user hanya Admin saja.
+    // Jika tipe laba adalah input nominal (khusus transaksi jenis "Admin"), maka total bayar = nominal murni, biaya tambahan 0.
+    if (dynamicConfig.labaType === 'input_nominal') {
+      biayaTambahan = 0;
+    } else if (dynamicConfig.labaType === 'equals_admin') {
+      biayaTambahan = admin; 
+    }
+
+    totalBayar = numNominal + biayaTambahan;
+    
+    return { admin, laba, totalBayar };
+  }
+
+  // --- FALLBACK KE LOGIKA LAMA JIKA BELUM ADA CONFIG DINAMIS ---
   const hitungAdminEwallet = (nom) => {
     if (nom <= 100000) return 2000;
     if (nom <= 999000) return 3000;

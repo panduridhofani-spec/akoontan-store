@@ -72,9 +72,17 @@
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.tabs::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 .tab {
   flex: 1;
+  min-width: 110px;
   padding: 12px;
   text-align: center;
   border-radius: 12px;

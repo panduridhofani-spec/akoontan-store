@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { PlusCircle, List, Trash2, Calendar, User, FileText, CheckCircle, Printer, Flag, Settings, Edit2, Loader2 } from 'lucide-react';
+import { PlusCircle, List, Trash2, Calendar, User, FileText, CheckCircle, Printer, Flag, Settings, Edit2, Loader2, Package } from 'lucide-react';
 import { calculateAdminAndLaba, formatRupiah } from './utils/calculator';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, writeBatch, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import './App.css';
+import ProductConfigTab from './components/ProductConfigTab';
 
 const JENIS_TRANSAKSI = [
   'Tarik Tunai Bank',
@@ -122,6 +123,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('input'); // 'input', 'report', or 'accounts'
   const [transactions, setTransactions] = useState([]);
   const [users, setUsers] = useState([]);
+  const [productConfigs, setProductConfigs] = useState([]);
   
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('currentUser');
@@ -237,6 +239,11 @@ function App() {
   };
 
   useEffect(() => {
+    const unsubConfigs = onSnapshot(collection(db, 'product_configs'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProductConfigs(data);
+    });
+
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
       const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (usersData.length === 0) {
@@ -295,6 +302,7 @@ function App() {
     cleanupOldData();
 
     return () => {
+      unsubConfigs();
       unsubUsers();
       unsubAuthCode();
       unsubAccessControl();
@@ -346,12 +354,13 @@ function App() {
 
   useEffect(() => {
     if (formData.jenis && formData.nominal) {
-      const calc = calculateAdminAndLaba(formData.jenis, formData.provider, formData.nominal, formData.adminBank);
+      const activeConfig = productConfigs.find(c => c.jenisTransaksi === formData.jenis);
+      const calc = calculateAdminAndLaba(formData.jenis, formData.provider, formData.nominal, formData.adminBank, activeConfig);
       setCalculation(calc);
     } else {
       setCalculation({ admin: 0, laba: 0, totalBayar: 0 });
     }
-  }, [formData.jenis, formData.provider, formData.nominal, formData.adminBank]);
+  }, [formData.jenis, formData.provider, formData.nominal, formData.adminBank, productConfigs]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -716,13 +725,22 @@ function App() {
 
       <div className="tabs animate-slide-up no-print">
         {isMaster && (
-          <div 
-            className={`tab ${activeTab === 'rekap' ? 'active' : ''}`}
-            onClick={() => setActiveTab('rekap')}
-          >
-            <FileText size={20} style={{marginBottom: 4, display: 'block', margin: '0 auto'}}/>
-            Rekap Data
-          </div>
+          <>
+            <div 
+              className={`tab ${activeTab === 'rekap' ? 'active' : ''}`}
+              onClick={() => setActiveTab('rekap')}
+            >
+              <FileText size={20} style={{marginBottom: 4, display: 'block', margin: '0 auto'}}/>
+              Rekap Data
+            </div>
+            <div 
+              className={`tab ${activeTab === 'config' ? 'active' : ''}`}
+              onClick={() => setActiveTab('config')}
+            >
+              <Package size={20} style={{marginBottom: 4, display: 'block', margin: '0 auto'}}/>
+              Pengaturan Produk
+            </div>
+          </>
         )}
         <div 
           className={`tab ${activeTab === 'input' ? 'active' : ''}`}
@@ -776,23 +794,36 @@ function App() {
                 name="jenis"
                 value={formData.jenis}
                 onChange={handleChange}
-                options={JENIS_TRANSAKSI}
+                options={productConfigs.length > 0 ? productConfigs.map(c => c.jenisTransaksi) : JENIS_TRANSAKSI}
                 placeholder="-- Pilih Jenis Transaksi --"
               />
             </div>
 
-            {PROVIDERS[formData.jenis] && (
-              <div className="form-group">
-                <label>Provider / Bank</label>
-                <CustomSelect 
-                  name="provider"
-                  value={formData.provider}
-                  onChange={handleChange}
-                  options={PROVIDERS[formData.jenis]}
-                  placeholder="-- Pilih Provider --"
-                />
-              </div>
-            )}
+            {(() => {
+              let opts = [];
+              let hasOpts = false;
+              if (productConfigs.length > 0) {
+                const conf = productConfigs.find(c => c.jenisTransaksi === formData.jenis);
+                opts = conf?.providers || [];
+                hasOpts = opts.length > 0;
+              } else {
+                opts = PROVIDERS[formData.jenis] || [];
+                hasOpts = opts.length > 0;
+              }
+              if (!hasOpts) return null;
+              return (
+                <div className="form-group">
+                  <label>Provider / Bank</label>
+                  <CustomSelect 
+                    name="provider"
+                    value={formData.provider}
+                    onChange={handleChange}
+                    options={opts}
+                    placeholder="-- Pilih Provider --"
+                  />
+                </div>
+              );
+            })()}
 
             <div className="form-group">
               <label>Nominal Transaksi (Rp)</label>
@@ -1245,6 +1276,10 @@ function App() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'config' && isMaster && (
+        <ProductConfigTab />
       )}
 
     </div>
