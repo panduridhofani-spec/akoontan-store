@@ -64,6 +64,12 @@ export default function ProductConfigTab() {
     }
   };
 
+  const handleCloseModal = () => {
+    if (window.confirm('Yakin ingin membatalkan/keluar? Perubahan yang belum disimpan akan hilang.')) {
+      setShowModal(false);
+    }
+  };
+
   const handleAddProvider = () => {
     if (!newProvider.trim()) return;
     if (form.providers.includes(newProvider.trim())) return;
@@ -72,6 +78,7 @@ export default function ProductConfigTab() {
   };
 
   const handleRemoveProvider = (prov) => {
+    if (!window.confirm(`Yakin ingin menghapus provider "${prov}"?`)) return;
     setForm({ ...form, providers: form.providers.filter(p => p !== prov) });
   };
 
@@ -86,6 +93,7 @@ export default function ProductConfigTab() {
   };
 
   const removeAdminRange = (index) => {
+    if (!window.confirm('Yakin ingin menghapus range admin ini?')) return;
     const newRanges = [...form.adminRanges];
     newRanges.splice(index, 1);
     setForm({ ...form, adminRanges: newRanges });
@@ -102,6 +110,7 @@ export default function ProductConfigTab() {
   };
 
   const removeLabaRange = (index) => {
+    if (!window.confirm('Yakin ingin menghapus range laba ini?')) return;
     const newRanges = [...form.labaRanges];
     newRanges.splice(index, 1);
     setForm({ ...form, labaRanges: newRanges });
@@ -179,7 +188,7 @@ export default function ProductConfigTab() {
           <div className="glass-container animate-slide-up" style={{ background: 'white', maxWidth: '700px', margin: '0 auto', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '18px' }}>{isEditing ? 'Edit Konfigurasi Transaksi' : 'Tambah Konfigurasi Baru'}</h3>
-              <button onClick={() => setShowModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={24}/></button>
+              <button onClick={handleCloseModal} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={24}/></button>
             </div>
 
             <form onSubmit={handleSave}>
@@ -206,10 +215,10 @@ export default function ProductConfigTab() {
               {/* RUMUS ADMIN */}
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
                 <h4 style={{ marginTop: 0, color: '#4f46e5', marginBottom: '12px' }}>A. Rumus Biaya Admin</h4>
-                <select className="input-field" value={form.adminType} onChange={e => setForm({...form, adminType: e.target.value})} style={{ marginBottom: '12px' }}>
+                <select className="input-field" value={form.adminType} onChange={e => setForm({...form, adminType: e.target.value})} style={{ marginBottom: '12px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: '24px', maxWidth: '100%' }}>
                   <option value="zero">1. Tanpa Admin (Rp 0)</option>
-                  <option value="flat">2. Flat / Tetap (Misal selalu Rp 2.000)</option>
-                  <option value="range">3. Bertingkat / Range nominal</option>
+                  <option value="flat">2. Flat / Tetap (Rp)</option>
+                  <option value="range">3. Bertingkat / Range Nominal</option>
                 </select>
 
                 {form.adminType === 'flat' && (
@@ -223,12 +232,16 @@ export default function ProductConfigTab() {
                   <div>
                     <div style={{ marginBottom: '12px' }}>
                       {form.adminRanges.map((r, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '13px' }}>Max Nominal Rp</span>
-                          <input type="number" className="input-field" style={{ width: '150px' }} value={r.max} onChange={e => updateAdminRange(i, 'max', e.target.value)} />
-                          <span style={{ fontSize: '13px' }}>=&gt; Admin Rp</span>
-                          <input type="number" className="input-field" style={{ width: '150px' }} value={r.fee} onChange={e => updateAdminRange(i, 'fee', e.target.value)} />
-                          <button type="button" onClick={() => removeAdminRange(i)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', padding: '6px' }}><Trash2 size={16}/></button>
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', flex: '1 1 120px', gap: '4px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Max Rp</span>
+                            <input type="number" className="input-field" style={{ width: '100%', minWidth: '80px' }} value={r.max} onChange={e => updateAdminRange(i, 'max', e.target.value)} />
+                          </div>
+                          <div style={{ display: 'flex', flex: '1 1 120px', gap: '4px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Admin Rp</span>
+                            <input type="number" className="input-field" style={{ width: '100%', minWidth: '80px' }} value={r.fee} onChange={e => updateAdminRange(i, 'fee', e.target.value)} />
+                          </div>
+                          <button type="button" onClick={() => removeAdminRange(i)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', padding: '10px' }}><Trash2 size={16}/></button>
                         </div>
                       ))}
                       <button type="button" onClick={addAdminRange} className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '12px' }}>+ Tambah Range</button>
@@ -239,10 +252,13 @@ export default function ProductConfigTab() {
                       Aktifkan Rumus Kelipatan (Overflow)
                     </label>
                     {form.adminOverflow.active && (
-                      <div style={{ marginTop: '8px', background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '12px' }}>
-                        Jika nominal lebih besar dari <input type="number" value={form.adminOverflow.limit} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, limit: Number(e.target.value)}})} style={{ width: '100px' }} />, 
-                        tambahkan admin Rp <input type="number" value={form.adminOverflow.addFee} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, addFee: Number(e.target.value)}})} style={{ width: '80px' }} /> 
-                        per kelipatan Rp <input type="number" value={form.adminOverflow.perIncrement} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, perIncrement: Number(e.target.value)}})} style={{ width: '100px' }} />.
+                      <div style={{ marginTop: '8px', background: '#f9fafb', padding: '12px', borderRadius: '6px', fontSize: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>Jika nominal lebih besar dari</span>
+                        <input type="number" value={form.adminOverflow.limit} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, limit: Number(e.target.value)}})} style={{ width: '100px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }} />
+                        <span style={{ whiteSpace: 'nowrap' }}>, tambahkan admin Rp</span>
+                        <input type="number" value={form.adminOverflow.addFee} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, addFee: Number(e.target.value)}})} style={{ width: '80px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }} />
+                        <span style={{ whiteSpace: 'nowrap' }}>per kelipatan Rp</span>
+                        <input type="number" value={form.adminOverflow.perIncrement} onChange={e => setForm({...form, adminOverflow: {...form.adminOverflow, perIncrement: Number(e.target.value)}})} style={{ width: '100px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }} />
                       </div>
                     )}
                   </div>
@@ -252,14 +268,14 @@ export default function ProductConfigTab() {
               {/* RUMUS LABA */}
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
                 <h4 style={{ marginTop: 0, color: '#16a34a', marginBottom: '12px' }}>B. Rumus Laba Toko</h4>
-                <select className="input-field" value={form.labaType} onChange={e => setForm({...form, labaType: e.target.value})} style={{ marginBottom: '12px' }}>
+                <select className="input-field" value={form.labaType} onChange={e => setForm({...form, labaType: e.target.value})} style={{ marginBottom: '12px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: '24px', maxWidth: '100%' }}>
                   <option value="zero">1. Tanpa Laba (Rp 0)</option>
-                  <option value="equals_admin">2. Laba = Sama dengan hasil Biaya Admin</option>
-                  <option value="flat">3. Flat / Tetap (Misal selalu Rp 2.000)</option>
-                  <option value="admin_minus_flat">4. Laba = Admin dikurangi Potongan Tetap</option>
-                  <option value="admin_minus_provider">5. Laba = Admin dikurangi Potongan per Provider</option>
-                  <option value="range">6. Laba pakai Rentang Bertingkat sendiri (seperti Pulsa)</option>
-                  <option value="input_nominal">7. Laba = Nominal yang diinput oleh user</option>
+                  <option value="equals_admin">2. Sama dengan Biaya Admin</option>
+                  <option value="flat">3. Flat / Tetap (Rp)</option>
+                  <option value="admin_minus_flat">4. Admin dikurangi Potongan Flat</option>
+                  <option value="admin_minus_provider">5. Admin dikurangi Potongan Provider</option>
+                  <option value="range">6. Rentang Bertingkat Sendiri</option>
+                  <option value="input_nominal">7. Bebas (Input Nominal Manual)</option>
                 </select>
 
                 {form.labaType === 'flat' && (
@@ -296,12 +312,16 @@ export default function ProductConfigTab() {
                   <div>
                     <div style={{ marginBottom: '12px' }}>
                       {form.labaRanges.map((r, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '13px' }}>Max Nominal Rp</span>
-                          <input type="number" className="input-field" style={{ width: '150px' }} value={r.max} onChange={e => updateLabaRange(i, 'max', e.target.value)} />
-                          <span style={{ fontSize: '13px' }}>=&gt; Laba Rp</span>
-                          <input type="number" className="input-field" style={{ width: '150px' }} value={r.laba} onChange={e => updateLabaRange(i, 'laba', e.target.value)} />
-                          <button type="button" onClick={() => removeLabaRange(i)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', padding: '6px' }}><Trash2 size={16}/></button>
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', flex: '1 1 120px', gap: '4px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Max Rp</span>
+                            <input type="number" className="input-field" style={{ width: '100%', minWidth: '80px' }} value={r.max} onChange={e => updateLabaRange(i, 'max', e.target.value)} />
+                          </div>
+                          <div style={{ display: 'flex', flex: '1 1 120px', gap: '4px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>Laba Rp</span>
+                            <input type="number" className="input-field" style={{ width: '100%', minWidth: '80px' }} value={r.laba} onChange={e => updateLabaRange(i, 'laba', e.target.value)} />
+                          </div>
+                          <button type="button" onClick={() => removeLabaRange(i)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', padding: '10px' }}><Trash2 size={16}/></button>
                         </div>
                       ))}
                       <button type="button" onClick={addLabaRange} className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '12px' }}>+ Tambah Range Laba</button>
