@@ -5,6 +5,7 @@ import { collection, onSnapshot, setDoc, deleteDoc, doc, writeBatch, query, wher
 import { db } from './firebase';
 import './App.css';
 import ProductConfigTab from './components/ProductConfigTab';
+import { connectBluetoothPrinter, printStrukBluetooth } from './utils/printer';
 
 const JENIS_TRANSAKSI = [
   'Tarik Tunai Bank',
@@ -137,6 +138,15 @@ function App() {
   const [editingAccountId, setEditingAccountId] = useState(null);
   const [isWelcomeScreen, setIsWelcomeScreen] = useState(true);
   const [searchTime, setSearchTime] = useState('');
+  const [receiptData, setReceiptData] = useState(null);
+  const [printerSize, setPrinterSize] = useState(() => localStorage.getItem('printerSize') || '58mm');
+  const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [blePrinterChar, setBlePrinterChar] = useState(null);
+  const [isConnectingBT, setIsConnectingBT] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('printerSize', printerSize);
+  }, [printerSize]);
 
   // New state for Date Report Feature
   const getTodayString = () => {
@@ -511,6 +521,7 @@ function App() {
       };
 
       if (editingTxId) {
+        newTx.id = editingTxId;
         await setDoc(doc(db, 'transactions', editingTxId), newTx, { merge: true });
         setEditingTxId(null);
         setFormData({
@@ -524,9 +535,10 @@ function App() {
           keterangan: '',
           ditandai: false
         });
-        alert('Transaksi Berhasil Diupdate!');
+        setReceiptData(newTx);
       } else {
         const newTxId = Date.now().toString();
+        newTx.id = newTxId;
         await setDoc(doc(db, 'transactions', newTxId), newTx);
         setFormData({
           waktu: new Date().toISOString().slice(0, 16),
@@ -539,7 +551,7 @@ function App() {
           adminBank: '',
           ditandai: false
         });
-        alert('Transaksi Berhasil Disimpan!');
+        setReceiptData(newTx);
       }
     } catch (error) {
       alert('Terjadi kesalahan: ' + error.message);
@@ -608,6 +620,119 @@ function App() {
   const handlePrint = () => {
     setPrintDate(new Date(selectedDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
     setTimeout(() => window.print(), 300);
+  };
+
+  const handlePrintReceipt = async () => {
+    if (blePrinterChar) {
+      try {
+        await printStrukBluetooth(blePrinterChar, receiptData, printerSize);
+        // Bisa tambahkan toast/alert ringan jika perlu, atau diam saja
+        setReceiptData(null); // Tutup modal setelah cetak
+      } catch (err) {
+        alert("Gagal cetak Bluetooth: " + err.message);
+      }
+      return;
+    }
+
+    // Fallback ke browser print (PDF) jika belum connect bluetooth
+    document.body.classList.add('printing-receipt');
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('printing-receipt');
+      }, 500);
+    }, 100);
+  };
+
+  const handleConnectBT = async () => {
+    setIsConnectingBT(true);
+    try {
+      const { writeCharacteristic } = await connectBluetoothPrinter();
+      setBlePrinterChar(writeCharacteristic);
+      alert("Bluetooth Printer Berhasil Terhubung!");
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        alert("Gagal menghubungkan: " + err.message);
+      }
+    } finally {
+      setIsConnectingBT(false);
+    }
+  };
+
+  const getProductText = (trx) => {
+    const nom = formatRupiah(trx.nominal).replace(/IDR|Rp/g, '').trim();
+    let base = '';
+    
+    if (trx.jenis === 'Tarik BPNT/PKH') base = `PKH ${nom}`;
+    else if (trx.jenis === 'E-Wallet') base = `Top up ${trx.provider} ${nom}`;
+    else if (trx.jenis === 'Transfer Bank') base = `TF ${trx.provider} ${nom}`;
+    else if (trx.jenis === 'Transfer Antar Bank') base = `TF Antar Bank ${nom}`;
+    else if (trx.jenis === 'Tarik Tunai Bank') base = `Tarik ${trx.provider || 'Tunai'} ${nom}`;
+    else if (trx.jenis === 'Pulsa') base = `Pulsa ${nom}`;
+    else if (trx.jenis === 'Paket Data') base = `Paket Data ${nom}`;
+    else if (trx.jenis === 'Token Listrik') base = `Token Listrik ${nom}`;
+    else if (trx.jenis === 'Listrik Meteran') base = `Listrik Meteran ${nom}`;
+    else if (trx.jenis === 'Virtual Account / BRIVA') base = `Bayar ${trx.provider} ${nom}`;
+    else if (trx.jenis === 'Admin') base = `Admin`;
+    else base = `${trx.jenis} ${trx.provider ? trx.provider : ''} ${nom}`;
+  
+    return base;
+  };
+
+  const renderReceiptPreview = (trx) => {
+    if (!trx) return null;
+    return (
+      <div className={`receipt-preview w-${printerSize.replace('mm', '')}`}>
+        <div className="receipt-text-center receipt-text-bold" style={{ fontSize: '14px' }}>DIHE MART</div>
+        <div className="receipt-text-center">Toko Kelontong & Agen BRI Link</div>
+        <div className="receipt-text-center" style={{ fontSize: '10px' }}>Simpan struk ini sebagai bukti pembayaran</div>
+        
+        <div className="receipt-divider"></div>
+        
+        <div className="receipt-row">
+          <span>Tgl: {trx.tanggal.split('-').reverse().join('/')}</span>
+          <span>Jam: {trx.jamManual || (trx.waktu && trx.waktu.length >= 16 ? trx.waktu.substring(11, 16) : '-')}</span>
+        </div>
+        <div className="receipt-row">
+          <span>Kasir: {trx.inputBy || 'Kasir'}</span>
+        </div>
+        {trx.pelanggan && (
+          <div className="receipt-row">
+            <span>Plg  : {trx.pelanggan}</span>
+          </div>
+        )}
+        
+        <div className="receipt-divider"></div>
+        
+        <div className="receipt-text-bold">{getProductText(trx)}</div>
+        {trx.keterangan && (
+          <div>Ket  : {trx.keterangan}</div>
+        )}
+        
+        <div className="receipt-divider-solid"></div>
+        
+        <div className="receipt-row">
+          <span>Nominal</span>
+          <span>{formatRupiah(trx.nominal)}</span>
+        </div>
+        <div className="receipt-row">
+          <span>Biaya Admin</span>
+          <span>{formatRupiah(trx.admin)}</span>
+        </div>
+        
+        <div className="receipt-divider-solid"></div>
+        
+        <div className="receipt-row receipt-text-bold" style={{ fontSize: '14px' }}>
+          <span>TOTAL</span>
+          <span>{formatRupiah(trx.totalBayar)}</span>
+        </div>
+        
+        <div className="receipt-divider"></div>
+        
+        <div className="receipt-text-center receipt-text-bold" style={{ marginTop: '8px' }}>TERIMA KASIH</div>
+        <div className="receipt-text-center">Selamat Belanja Kembali</div>
+      </div>
+    );
   };
 
   if (!currentUser) {
@@ -715,7 +840,12 @@ function App() {
             </button>
           )}
         </p>
-        <button onClick={() => setIsWelcomeScreen(true)} className="action-btn" style={{ marginTop: '8px', fontSize: '12px', background: '#e0e7ff', color: '#4f46e5', padding: '6px 16px', borderRadius: '20px', fontWeight: '600' }}>Ubah Tanggal</button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+          <button onClick={() => setIsWelcomeScreen(true)} className="action-btn" style={{ fontSize: '12px', background: '#e0e7ff', color: '#4f46e5', padding: '6px 16px', borderRadius: '20px', fontWeight: '600' }}>Ubah Tanggal</button>
+          <button onClick={() => setIsPrinterSettingsOpen(true)} className="action-btn" style={{ fontSize: '12px', background: '#f3f4f6', color: '#4b5563', padding: '6px 16px', borderRadius: '20px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Settings size={14} /> Pengaturan Printer
+          </button>
+        </div>
         <button onClick={handleLogout} className="logout-btn" style={{ position: 'absolute', top: '0', right: 0 }}>Logout</button>
       </div>
 
@@ -951,7 +1081,10 @@ function App() {
                           </td>
                         )}
                         {!isAdmin && (
-                          <td className="no-print" style={{textAlign: 'center', minWidth: '100px'}}>
+                          <td className="no-print" style={{textAlign: 'center', minWidth: '120px'}}>
+                            <button onClick={() => setReceiptData(t)} className="action-btn" style={{color: '#10b981', marginRight: '8px'}} title="Cetak Struk">
+                              <Printer size={16} />
+                            </button>
                             <button onClick={() => toggleMark(t.id)} className={`action-btn ${t.ditandai ? 'marked-btn' : 'mark-btn'}`} title="Tandai Transaksi">
                               <Flag size={16} />
                             </button>
@@ -1280,6 +1413,106 @@ function App() {
 
       {activeTab === 'config' && isMaster && (
         <ProductConfigTab />
+      )}
+
+      {/* Receipt Modal & Print Zone */}
+      {receiptData && (
+        <>
+          <div className="receipt-modal-overlay no-print" onClick={(e) => { if (e.target.className.includes('receipt-modal-overlay')) setReceiptData(null); }}>
+            <div className="receipt-modal-content animate-slide-up">
+              <h3>Cetak Struk Transaksi</h3>
+              
+              <div className="receipt-preview-container">
+                {renderReceiptPreview(receiptData)}
+              </div>
+
+              {blePrinterChar ? (
+                <div style={{ textAlign: 'center', fontSize: '12px', color: '#10b981', marginBottom: '12px', fontWeight: 'bold' }}>
+                  ✓ Bluetooth Printer Terhubung ({printerSize})
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
+                  ⚠️ Printer Bluetooth Belum Terhubung.<br/>(Akan menggunakan PDF Browser Print)
+                </div>
+              )}
+
+              <div className="receipt-actions">
+                <button className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setReceiptData(null)}>
+                  Batal / Tutup
+                </button>
+                <button className="btn-primary" style={{ flex: 2, padding: '12px' }} onClick={handlePrintReceipt}>
+                  <Printer size={18} style={{ marginRight: '8px' }} />
+                  Cetak Sekarang
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="receipt-print-zone">
+            {renderReceiptPreview(receiptData)}
+          </div>
+        </>
+      )}
+
+      {/* Printer Settings Modal */}
+      {isPrinterSettingsOpen && (
+        <div className="receipt-modal-overlay no-print" onClick={(e) => { if (e.target.className.includes('receipt-modal-overlay')) setIsPrinterSettingsOpen(false); }}>
+          <div className="receipt-modal-content animate-slide-up">
+            <h3>Pengaturan Printer</h3>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '12px' }}>Ukuran Kertas</label>
+              <div className="printer-settings">
+                <label>
+                  <input 
+                    type="radio" 
+                    name="printerSizeSetting" 
+                    value="58mm" 
+                    checked={printerSize === '58mm'} 
+                    onChange={() => setPrinterSize('58mm')}
+                  />
+                  Printer 58mm
+                </label>
+                <label>
+                  <input 
+                    type="radio" 
+                    name="printerSizeSetting" 
+                    value="80mm" 
+                    checked={printerSize === '80mm'} 
+                    onChange={() => setPrinterSize('80mm')}
+                  />
+                  Printer 80mm
+                </label>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '12px' }}>Koneksi Bluetooth (Langsung Cetak)</label>
+              {blePrinterChar ? (
+                <div style={{ background: '#d1fae5', color: '#065f46', padding: '12px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold' }}>
+                  ✓ Printer Terhubung
+                  <button 
+                    onClick={() => setBlePrinterChar(null)} 
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', textDecoration: 'underline', cursor: 'pointer', display: 'block', margin: '8px auto 0' }}
+                  >
+                    Putuskan Koneksi
+                  </button>
+                </div>
+              ) : (
+                <button className="btn-primary" onClick={handleConnectBT} disabled={isConnectingBT} style={{ background: '#3b82f6' }}>
+                  {isConnectingBT ? <Loader2 className="animate-spin" size={18} /> : 'Cari & Hubungkan Printer'}
+                </button>
+              )}
+              <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '8px', lineHeight: '1.4' }}>
+                Jika dihubungkan via Bluetooth, struk akan langsung tercetak tanpa muncul dialog PDF Chrome. Pastikan bluetooth HP/Laptop nyala. Jika printer ditolak, coba pasangkan (pairing) manual dulu di setelan Bluetooth sistem operasi Anda.
+              </p>
+            </div>
+
+            <button className="btn-secondary" onClick={() => setIsPrinterSettingsOpen(false)}>
+              Tutup Pengaturan
+            </button>
+          </div>
+        </div>
       )}
 
     </div>

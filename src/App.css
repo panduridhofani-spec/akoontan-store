@@ -390,3 +390,145 @@ td {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* --- RECEIPT MODAL & PRINT STYLES --- */
+.receipt-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.receipt-modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.receipt-modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--primary);
+  text-align: center;
+}
+
+.printer-settings {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.printer-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.receipt-preview-container {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.receipt-preview {
+  background: white;
+  padding: 16px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: black;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  line-height: 1.4;
+}
+
+.receipt-preview.w-58 {
+  width: 58mm;
+}
+
+.receipt-preview.w-80 {
+  width: 80mm;
+}
+
+.receipt-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.receipt-print-zone {
+  display: none;
+}
+
+.receipt-divider {
+  border-top: 1px dashed #000;
+  margin: 6px 0;
+}
+
+.receipt-divider-solid {
+  border-top: 1px solid #000;
+  margin: 6px 0;
+}
+
+.receipt-text-center {
+  text-align: center;
+}
+
+.receipt-text-right {
+  text-align: right;
+}
+
+.receipt-text-bold {
+  font-weight: bold;
+}
+
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+@media print {
+  body.printing-receipt {
+    background: white;
+    margin: 0;
+    padding: 0;
+  }
+  
+  body.printing-receipt .app-container > *:not(.receipt-print-zone) {
+    display: none !important;
+  }
+  
+  body.printing-receipt .receipt-modal-overlay {
+    display: none !important;
+  }
+  
+  body.printing-receipt .receipt-print-zone {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  
+  body.printing-receipt .receipt-preview {
+    box-shadow: none;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+}

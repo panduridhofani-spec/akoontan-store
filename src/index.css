@@ -75,6 +75,26 @@ body {
   transform: translateY(0);
 }
 
+.btn-secondary {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #e5e7eb;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.btn-secondary:hover {
+  background: #e5e7eb;
+}
+
 .btn-danger {
   background: var(--danger);
   color: white;
