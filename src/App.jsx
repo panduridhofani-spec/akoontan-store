@@ -683,9 +683,11 @@ function App() {
     if (!trx) return null;
     return (
       <div className={`receipt-preview w-${printerSize.replace('mm', '')}`}>
-        <div className="receipt-text-center receipt-text-bold" style={{ fontSize: '14px' }}>DIHE MART</div>
-        <div className="receipt-text-center">Toko Kelontong & Agen BRI Link</div>
-        <div className="receipt-text-center" style={{ fontSize: '10px' }}>Simpan struk ini sebagai bukti pembayaran</div>
+        <div className="receipt-text-center" style={{ marginBottom: '8px' }}>
+          <img src="/favicon.jpg" alt="Dihe Mart Logo" style={{ width: printerSize === '80mm' ? '140px' : '100px', filter: 'grayscale(100%) contrast(1.2)' }} />
+        </div>
+        <div className="receipt-text-center" style={{ fontSize: '11px', marginBottom: '4px' }}>Toko Kelontong & Agen BRI Link</div>
+        <div className="receipt-text-center" style={{ fontSize: '10px', color: '#555' }}>Simpan struk ini sebagai bukti pembayaran</div>
         
         <div className="receipt-divider"></div>
         
@@ -722,12 +724,12 @@ function App() {
         
         <div className="receipt-divider-solid"></div>
         
-        <div className="receipt-row receipt-text-bold" style={{ fontSize: '14px' }}>
-          <span>TOTAL</span>
+        <div className="receipt-row receipt-text-bold" style={{ fontSize: '14px', margin: '4px 0' }}>
+          <span>TOTAL BAYAR</span>
           <span>{formatRupiah(trx.totalBayar)}</span>
         </div>
         
-        <div className="receipt-divider"></div>
+        <div className="receipt-divider-solid"></div>
         
         <div className="receipt-text-center receipt-text-bold" style={{ marginTop: '8px' }}>TERIMA KASIH</div>
         <div className="receipt-text-center">Selamat Belanja Kembali</div>
