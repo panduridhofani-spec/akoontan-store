@@ -1055,7 +1055,7 @@ function App() {
                       <th style={{width: 80, textAlign: 'center'}}>Total Unit</th>
                       <th className="text-right">Total Penjualan</th>
                       {!isAdmin && <th className="text-right print-laba">Laba</th>}
-                      {!isAdmin && <th className="no-print">Aksi</th>}
+                      <th className="no-print">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1082,22 +1082,24 @@ function App() {
                             {t.laba === 0 && (t.jenis === 'BPJS' || t.jenis === 'Multifinance' || t.jenis === 'Bayar QRIS') ? '-' : formatRupiah(t.laba)}
                           </td>
                         )}
-                        {!isAdmin && (
-                          <td className="no-print" style={{textAlign: 'center', minWidth: '120px'}}>
-                            <button onClick={() => setReceiptData(t)} className="action-btn" style={{color: '#10b981', marginRight: '8px'}} title="Cetak Struk">
-                              <Printer size={16} />
-                            </button>
-                            <button onClick={() => toggleMark(t.id)} className={`action-btn ${t.ditandai ? 'marked-btn' : 'mark-btn'}`} title="Tandai Transaksi">
-                              <Flag size={16} />
-                            </button>
-                            <button onClick={() => handleEditTransaction(t)} className="action-btn" style={{color: '#3b82f6', marginLeft: '8px'}} title="Edit">
-                              <Edit2 size={16} />
-                            </button>
-                            <button onClick={() => deleteTransaction(t.id)} className="action-btn delete-btn" title="Hapus" style={{marginLeft: '8px'}}>
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        )}
+                        <td className="no-print" style={{textAlign: 'center', minWidth: '120px'}}>
+                          <button onClick={() => setReceiptData(t)} className="action-btn" style={{color: '#10b981', marginRight: '8px'}} title="Cetak Struk">
+                            <Printer size={16} />
+                          </button>
+                          <button onClick={() => toggleMark(t.id)} className={`action-btn ${t.ditandai ? 'marked-btn' : 'mark-btn'}`} title="Tandai Transaksi">
+                            <Flag size={16} />
+                          </button>
+                          {!isAdmin && (
+                            <>
+                              <button onClick={() => handleEditTransaction(t)} className="action-btn" style={{color: '#3b82f6', marginLeft: '8px'}} title="Edit">
+                                <Edit2 size={16} />
+                              </button>
+                              <button onClick={() => deleteTransaction(t.id)} className="action-btn delete-btn" title="Hapus" style={{marginLeft: '8px'}}>
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
