@@ -39,11 +39,7 @@ export const connectBluetoothPrinter = async () => {
 };
 
 const formatRupiahStr = (number) => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(number);
+  return 'Rp ' + Number(number).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 export const printStrukBluetooth = async (writeCharacteristic, trx, printerSize = '58mm') => {
