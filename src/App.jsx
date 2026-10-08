@@ -625,7 +625,7 @@ function App() {
   const handlePrintReceipt = async () => {
     if (blePrinterChar) {
       try {
-        await printStrukBluetooth(blePrinterChar, receiptData, printerSize);
+        await printStrukBluetooth(blePrinterChar, receiptData, printerSize, '/favicon.jpg');
         // Bisa tambahkan toast/alert ringan jika perlu, atau diam saja
         setReceiptData(null); // Tutup modal setelah cetak
       } catch (err) {
