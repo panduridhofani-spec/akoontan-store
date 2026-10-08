@@ -118,105 +118,138 @@ const getLogoBytes = async (logoUrl, targetWidth = 200) => {
   });
 };
 
+let isPrintingTask = false;
+
 export const printStrukBluetooth = async (writeCharacteristic, trx, printerSize = '58mm', logoUrl = null) => {
   if (!writeCharacteristic) throw new Error("Printer tidak terhubung.");
+  
+  // Prevent double printing (GATT operation already in progress)
+  if (isPrintingTask) {
+    throw new Error("Printer sedang memproses data. Harap tunggu sebentar lalu coba lagi.");
+  }
+  
+  isPrintingTask = true;
 
-  const encoder = new TextEncoder();
-  const width = printerSize === '80mm' ? 48 : 32;
+  try {
+    const encoder = new TextEncoder();
+    const width = printerSize === '80mm' ? 48 : 32;
 
-  // Print Logo if available
-  let logoBytes = null;
-  if (logoUrl) {
-    try {
-      logoBytes = await getLogoBytes(logoUrl, 352); // 352px wide for 58mm (max is 384, we use 352 for slight margin)
-    } catch (e) {
-      console.error("Gagal meload logo:", e);
+    // Print Logo if available
+    let logoBytes = null;
+    if (logoUrl) {
+      try {
+        logoBytes = await getLogoBytes(logoUrl, 352); // 352px wide for 58mm (max is 384, we use 352 for slight margin)
+      } catch (e) {
+        console.error("Gagal meload logo:", e);
+      }
     }
+
+    // ESC/POS Commands
+    const ESC = '\x1B';
+    const GS = '\x1D';
+    const INIT = ESC + '@';
+    const ALIGN_LEFT = ESC + 'a0';
+    const ALIGN_CENTER = ESC + 'a1';
+    const ALIGN_RIGHT = ESC + 'a2';
+    const BOLD_ON = ESC + 'E1';
+    const BOLD_OFF = ESC + 'E0';
+    const FEED = '\n';
+    
+    // Custom format text based on width
+    const padRight = (str, len) => str.padEnd(len, ' ').substring(0, len);
+    const padLeft = (str, len) => str.padStart(len, ' ').substring(0, len);
+    const padBetween = (str1, str2) => {
+      const spaceLen = width - str1.length - str2.length;
+      if (spaceLen > 0) return str1 + ' '.repeat(spaceLen) + str2;
+      return (str1 + ' ' + str2).substring(0, width);
+    };
+    const divider = '-'.repeat(width) + FEED;
+    const dividerSolid = '='.repeat(width) + FEED;
+
+    let baseProd = trx.jenis + (trx.provider ? ' ' + trx.provider : '') + ' ' + formatRupiahStr(trx.nominal).replace(/IDR|Rp/g, '').trim();
+    if (trx.jenis === 'Tarik BPNT/PKH') baseProd = `PKH ` + formatRupiahStr(trx.nominal).replace(/IDR|Rp/g, '').trim();
+    else if (trx.jenis === 'Admin') baseProd = `Admin`;
+
+    let content = INIT;
+    
+    content += ALIGN_CENTER + BOLD_ON + "DIHE MART" + FEED;
+    content += BOLD_OFF + "Toko Kelontong & Agen BRI Link" + FEED;
+    content += "Simpan struk ini sebagai" + FEED + "bukti pembayaran" + FEED;
+    content += ALIGN_LEFT + divider;
+    
+    const dateStr = trx.tanggal.split('-').reverse().join('/');
+    const timeStr = trx.jamManual || (trx.waktu && trx.waktu.length >= 16 ? trx.waktu.substring(11, 16) : '-');
+    
+    content += padBetween(`Tgl: ${dateStr}`, `Jam: ${timeStr}`) + FEED;
+    content += `Kasir: ${trx.inputBy || 'Kasir'}` + FEED;
+    if (trx.pelanggan) content += `Plg  : ${trx.pelanggan}` + FEED;
+    
+    content += divider;
+    
+    content += BOLD_ON + baseProd + BOLD_OFF + FEED;
+    if (trx.keterangan) content += `Ket  : ${trx.keterangan}` + FEED;
+    
+    content += dividerSolid;
+    
+    content += padBetween("Nominal", formatRupiahStr(trx.nominal)) + FEED;
+    content += padBetween("Biaya Admin", formatRupiahStr(trx.admin)) + FEED;
+    
+    content += dividerSolid;
+    
+    content += BOLD_ON + padBetween("TOTAL", formatRupiahStr(trx.totalBayar)) + BOLD_OFF + FEED;
+    
+    content += divider;
+    
+    content += ALIGN_CENTER + BOLD_ON + "TERIMA KASIH" + FEED;
+    content += BOLD_OFF + "Selamat Belanja Kembali" + FEED;
+    
+    content += FEED.repeat(4); // Feed paper out
+
+    const textBytes = encoder.encode(content);
+    
+    // Gabungkan byte logo (jika ada) dan byte teks
+    let finalBytes;
+    if (logoBytes) {
+       finalBytes = new Uint8Array(logoBytes.length + textBytes.length);
+       finalBytes.set(logoBytes, 0);
+       finalBytes.set(textBytes, logoBytes.length);
+    } else {
+       finalBytes = textBytes;
+    }
+
+    // Web Bluetooth limits chunk sizes (typically 512 or 20 bytes depending on GATT)
+    // We chunk into 64 bytes to be safe
+    const CHUNK_SIZE = 64;
+    
+    for (let i = 0; i < finalBytes.length; i += CHUNK_SIZE) {
+      const chunk = finalBytes.slice(i, i + CHUNK_SIZE);
+      
+      try {
+        if ('writeValueWithoutResponse' in writeCharacteristic) {
+          await writeCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await writeCharacteristic.writeValue(chunk);
+        }
+      } catch (e) {
+        if (e.message.includes("in progress")) {
+          // If still overlapping, wait a bit and retry
+          await new Promise(r => setTimeout(r, 50));
+          if ('writeValueWithoutResponse' in writeCharacteristic) {
+             await writeCharacteristic.writeValueWithoutResponse(chunk);
+          } else {
+             await writeCharacteristic.writeValue(chunk);
+          }
+        } else {
+          throw e;
+        }
+      }
+      
+      // Add a small delay between chunks to prevent buffer overflow on cheap printers
+      await new Promise(r => setTimeout(r, 30)); 
+    }
+    
+    return true;
+  } finally {
+    isPrintingTask = false;
   }
-
-  // ESC/POS Commands
-  const ESC = '\x1B';
-  const GS = '\x1D';
-  const INIT = ESC + '@';
-  const ALIGN_LEFT = ESC + 'a0';
-  const ALIGN_CENTER = ESC + 'a1';
-  const ALIGN_RIGHT = ESC + 'a2';
-  const BOLD_ON = ESC + 'E1';
-  const BOLD_OFF = ESC + 'E0';
-  const FEED = '\n';
-  
-  // Custom format text based on width
-  const padRight = (str, len) => str.padEnd(len, ' ').substring(0, len);
-  const padLeft = (str, len) => str.padStart(len, ' ').substring(0, len);
-  const padBetween = (str1, str2) => {
-    const spaceLen = width - str1.length - str2.length;
-    if (spaceLen > 0) return str1 + ' '.repeat(spaceLen) + str2;
-    return (str1 + ' ' + str2).substring(0, width);
-  };
-  const divider = '-'.repeat(width) + FEED;
-  const dividerSolid = '='.repeat(width) + FEED;
-
-  let baseProd = trx.jenis + (trx.provider ? ' ' + trx.provider : '') + ' ' + formatRupiahStr(trx.nominal).replace(/IDR|Rp/g, '').trim();
-  if (trx.jenis === 'Tarik BPNT/PKH') baseProd = `PKH ` + formatRupiahStr(trx.nominal).replace(/IDR|Rp/g, '').trim();
-  else if (trx.jenis === 'Admin') baseProd = `Admin`;
-
-  let content = INIT;
-  
-  content += ALIGN_CENTER + BOLD_ON + "DIHE MART" + FEED;
-  content += BOLD_OFF + "Toko Kelontong & Agen BRI Link" + FEED;
-  content += "Simpan struk ini sebagai" + FEED + "bukti pembayaran" + FEED;
-  content += ALIGN_LEFT + divider;
-  
-  const dateStr = trx.tanggal.split('-').reverse().join('/');
-  const timeStr = trx.jamManual || (trx.waktu && trx.waktu.length >= 16 ? trx.waktu.substring(11, 16) : '-');
-  
-  content += padBetween(`Tgl: ${dateStr}`, `Jam: ${timeStr}`) + FEED;
-  content += `Kasir: ${trx.inputBy || 'Kasir'}` + FEED;
-  if (trx.pelanggan) content += `Plg  : ${trx.pelanggan}` + FEED;
-  
-  content += divider;
-  
-  content += BOLD_ON + baseProd + BOLD_OFF + FEED;
-  if (trx.keterangan) content += `Ket  : ${trx.keterangan}` + FEED;
-  
-  content += dividerSolid;
-  
-  content += padBetween("Nominal", formatRupiahStr(trx.nominal)) + FEED;
-  content += padBetween("Biaya Admin", formatRupiahStr(trx.admin)) + FEED;
-  
-  content += dividerSolid;
-  
-  content += BOLD_ON + padBetween("TOTAL", formatRupiahStr(trx.totalBayar)) + BOLD_OFF + FEED;
-  
-  content += divider;
-  
-  content += ALIGN_CENTER + BOLD_ON + "TERIMA KASIH" + FEED;
-  content += BOLD_OFF + "Selamat Belanja Kembali" + FEED;
-  
-  content += FEED.repeat(4); // Feed paper out
-
-  const textBytes = encoder.encode(content);
-  
-  // Gabungkan byte logo (jika ada) dan byte teks
-  let finalBytes;
-  if (logoBytes) {
-     finalBytes = new Uint8Array(logoBytes.length + textBytes.length);
-     finalBytes.set(logoBytes, 0);
-     finalBytes.set(textBytes, logoBytes.length);
-  } else {
-     finalBytes = textBytes;
-  }
-
-  // Web Bluetooth limits chunk sizes (typically 512 or 20 bytes depending on GATT)
-  // We chunk into 64 bytes to be safe
-  const CHUNK_SIZE = 64;
-  
-  for (let i = 0; i < finalBytes.length; i += CHUNK_SIZE) {
-    const chunk = finalBytes.slice(i, i + CHUNK_SIZE);
-    await writeCharacteristic.writeValue(chunk);
-    // Add a small delay between chunks to prevent buffer overflow on cheap printers
-    await new Promise(r => setTimeout(r, 20)); 
-  }
-  
-  return true;
 };
